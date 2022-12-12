@@ -1,0 +1,145 @@
+---
+title: "Employment example"
+author: "Jouni Helske"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+Load some packages and create the data:
+
+```{r}
+library(dplyr)
+library(march)
+library(dynamite)
+library(ggplot2)
+library(RColorBrewer)
+N <- Employment.2@N
+T <- Employment.2@T[1]
+d <- data.frame(
+  employment = factor(c(Employment.2@yRaw), labels = c("Full-time", "Other")),
+  gender = factor(Employment.2@cov[,,1], labels = c("Woman", "Man")),
+  id = 1:N, age = rep(seq(20, 44, by = 2), each = N)) |>
+  mutate(fulltime = as.integer(employment == "Full-time"))
+```
+
+Define the model in dynamite:
+```{r}
+model_formula <- 
+  obs(fulltime ~ -1 +
+      varying(~ -1 + gender + gender:lag(never) + gender:lag(fulltime)),
+    family = "bernoulli") +
+  aux(never ~ fulltime == 0 & lag(never) == 1 | init(1)) +
+  splines(df = 6, noncentered = TRUE)
+
+fit <- dynamite(model_formula, data = d, group = "id", time = "age",
+  chains = 4, cores = 4, iter = 2000)
+#saveRDS(fit, file = "fit_employment.rds")
+```
+
+Draw figure of time-varying parameters:
+```{r, fig.align="center"}
+#fit <- readRDS("fit_employment.rds")
+coefs <- coef(fit, type = "delta", probs = c(0.025, 0.1, 0.9, 0.975)) |> 
+  filter(time > 20) |> 
+    mutate(gender = recode(parameter,
+        delta_fulltime_genderMan = "Man",
+        delta_fulltime_genderWoman = "Woman",
+        "delta_fulltime_genderWoman:never_lag1" = "Woman",
+        "delta_fulltime_genderMan:never_lag1" = "Man",
+        "delta_fulltime_genderWoman:fulltime_lag1" = "Woman",
+        "delta_fulltime_genderMan:fulltime_lag1" = "Man"
+    ),
+    Coefficient = recode(parameter,
+        delta_fulltime_genderMan = "intercept",
+        delta_fulltime_genderWoman = "intercept",
+        "delta_fulltime_genderWoman:never_lag1" = "lag(never)",
+        "delta_fulltime_genderMan:never_lag1" = "lag(never)",
+        "delta_fulltime_genderWoman:fulltime_lag1" = "lag(employment)",
+        "delta_fulltime_genderMan:fulltime_lag1" = "lag(employment)"
+    ))
+p <- ggplot(coefs, aes(time, mean)) +
+    geom_ribbon(aes(ymin = q2.5, ymax = q97.5, fill = Coefficient), alpha = 0.25) +
+    geom_ribbon(aes(ymin = q10, ymax = q90, fill = Coefficient), alpha = 0.25) +
+    geom_line(aes(colour = Coefficient)) + 
+    scale_x_continuous("Age", seq(22, 44, by = 2)) +
+    scale_y_continuous("Value", seq(-6, 8, by = 2)) +
+    theme_bw() +
+    scale_colour_brewer(palette = "Dark2") +
+    scale_fill_brewer(palette = "Dark2") +
+    facet_wrap(~gender, scales = "fixed") + 
+    theme(legend.position = "bottom", panel.grid.minor.x = element_blank()) 
+#ggsave(p, file = "../figures/deltas_employment.png", width = 7, height = 4)
+```
+
+```{r}
+# No full time employment at age 30
+newdata0 <- d |> filter(age >= 28)
+newdata0$fulltime[newdata0$age == 30] <- 0
+newdata0$fulltime[newdata0$age > 30] <- NA
+# Full time employment at age 30
+newdata1 <- d |> filter(age >= 28)
+newdata1$fulltime[newdata1$age == 30] <- 1
+newdata1$fulltime[newdata1$age > 30] <- NA
+
+pred <- 
+  bind_rows(
+    no = predict(fit, newdata = newdata0,
+      funs = list(fulltime = list(mean = mean)))$simulated,
+    yes = predict(fit, newdata = newdata1,
+      funs = list(fulltime = list(mean = mean)))$simulated,
+    .id = "fulltime_30"
+  ) |> filter(age > 28) |> 
+  group_by(age) |>
+  summarise(difference = 
+      mean_fulltime[fulltime_30 == "yes"] - 
+      mean_fulltime[fulltime_30 == "no"]
+  ) |>
+  summarise(
+    mean = mean(difference),
+    q2.5 = quantile(difference, 0.025),
+    q97.5 = quantile(difference, 0.975),
+    q10 = quantile(difference, 0.1),
+    q90 = quantile(difference, 0.9)
+  )
+#saveRDS(pred, file = "predictions_employment.rds")
+```
+
+
+```{r, fig.align="center"}
+#pred <- readRDS("predictions_employment.rds")
+obs_sumr <- d |> filter(age > 28) |> 
+  group_by(id) |>
+  mutate(fulltime_30 = ifelse(fulltime[age == 30], "yes", "no")) |>
+  group_by(age, fulltime_30) |>
+  summarise(mean_fulltime = mean(fulltime)) |>
+  group_by(age) |>
+  summarise(mean = mean(mean_fulltime[fulltime_30 == "yes"] - mean_fulltime[fulltime_30 == "no"]),
+    .groups = "keep")
+comb <- bind_rows(
+  intervention = pred,
+  observation = obs_sumr, .id = "Type") 
+p <- comb |>
+  ggplot(aes(age, mean)) +
+  geom_ribbon(data = comb |> filter(Type == "intervention"), 
+    aes(ymin = q2.5, ymax = q97.5, fill = Type), alpha = 0.25, show.legend = FALSE) +
+  geom_ribbon(data = comb |> filter(Type == "intervention"), 
+    aes(ymin = q10, ymax = q90, fill = Type), alpha = 0.25, show.legend = FALSE) +
+  geom_line(aes(colour = Type)) +
+  scale_x_continuous("Age", seq(30, 44, by = 2)) +
+  scale_y_continuous("Probability", seq(0.2, 1, by = 0.1)) +
+  theme_bw() + 
+  scale_colour_brewer(palette = "Dark2", name = NULL, 
+    labels = c("Intervention", "Observation"))  +
+  scale_fill_brewer(palette = "Dark2", name = NULL, 
+    labels = c("Intervention", "Observation")) +
+  theme(legend.position = "bottom", 
+    panel.grid.minor.x = element_blank(),
+    panel.grid.minor.y = element_blank()
+  )
+#ggsave(p, file = "../figures/causaleffect_employment.png", width = 7, height = 4)
+```
+
