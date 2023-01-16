@@ -289,24 +289,56 @@ results_recurring <- bind_rows(
 ```{r}
 results_atomic <- readRDS("results_atomic.rds")
 results_recurring <- readRDS("results_recurring.rds")
+# color version
+# p <- bind_rows(
+#   Atomic = results_atomic,
+#   Recurring = results_recurring,
+#   .id = "Intervention"
+# ) |>
+#   ggplot(aes(time, mean)) +
+#   geom_ribbon(aes(ymin = q2.5, ymax = q97.5, fill = Method), alpha = 0.25) +
+#   geom_ribbon(aes(ymin = q10, ymax = q90, fill = Method), alpha = 0.25) +
+#   geom_line(aes(colour = Method)) +
+#   ylab("Average causal effect") + 
+#   xlab("Time") + xlim(c(80, 100)) +
+#   theme_bw() + 
+#   scale_colour_brewer(palette = "Dark2", name = NULL, 
+#     labels = c("Simulated x", "Observed x")) +
+#   scale_fill_brewer(palette = "Dark2", name = NULL, 
+#     labels = c("Simulated x", "Observed x")) + 
+#   theme(legend.position = "bottom", panel.grid.minor.x = element_blank()) + 
+#   facet_wrap(~ Intervention, scales = "free")
+# linerange version
+# bind_rows(
+#     Atomic = results_atomic,
+#     Recurring = results_recurring,
+#     .id = "Intervention"
+# ) |>
+#     ggplot(aes(time, mean, group = Method)) +
+#     ylab("Average causal effect") + 
+#     geom_linerange(aes(ymin = q2.5, ymax = q97.5), position = position_dodge(0.6)) +
+#     geom_point(aes(shape = Method), position = position_dodge(0.6)) +
+#     geom_line(aes(linetype = Method), position = position_dodge(0.6)) +
+#     ylab("Average causal effect") + 
+#     xlab("Time") + xlim(c(79, 101)) +
+#     theme_bw() + 
+#     theme(legend.position = "bottom", panel.grid.minor.x = element_blank()) + 
+#     facet_wrap(~ Intervention, scales = "free")
 p <- bind_rows(
-  Atomic = results_atomic,
-  Recurring = results_recurring,
-  .id = "Intervention"
+    Atomic = results_atomic,
+    Recurring = results_recurring,
+    .id = "Intervention"
 ) |>
-  ggplot(aes(time, mean)) +
-  geom_ribbon(aes(ymin = q2.5, ymax = q97.5, fill = Method), alpha = 0.25) +
-  geom_ribbon(aes(ymin = q10, ymax = q90, fill = Method), alpha = 0.25) +
-  geom_line(aes(colour = Method)) +
-  ylab("Average causal effect") + 
-  xlab("Time") + xlim(c(80, 100)) +
-  theme_bw() + 
-  scale_colour_brewer(palette = "Dark2", name = NULL, 
-    labels = c("Simulated x", "Observed x")) +
-  scale_fill_brewer(palette = "Dark2", name = NULL, 
-    labels = c("Simulated x", "Observed x")) + 
-  theme(legend.position = "bottom", panel.grid.minor.x = element_blank()) + 
-  facet_wrap(~ Intervention, scales = "free")
-ggsave(p, file = "../figures/ex1_results.png", width = 7, height = 4)
+    ggplot(aes(time, mean)) +
+    geom_ribbon(aes(ymin = q2.5, ymax = q97.5, fill = Method), alpha = 0.25) +
+    geom_line(aes(linetype = Method)) +
+    scale_fill_grey() +
+    scale_linetype_manual(values = c("solid", "longdash")) +
+    ylab("Average causal effect") + 
+    xlab("Time") + xlim(c(80, 100)) +
+    theme_bw() + 
+    theme(legend.position = "bottom", panel.grid.minor.x = element_blank()) + 
+    facet_wrap(~ Intervention, scales = "free")
+ggsave(p, file = "../ex1_results.png", width = 7, height = 4)
 ```
 
