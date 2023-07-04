@@ -1,6 +1,6 @@
 ---
 title: "Employment example"
-author: "Jouni Helske"
+author: "Jouni Helske and Santtu Tikka"
 date: "`r Sys.Date()`"
 output: html_document
 ---
@@ -18,25 +18,29 @@ library(dynamite)
 library(ggplot2)
 library(RColorBrewer)
 N <- Employment.2@N
-T <- Employment.2@T[1]
+#T <- Employment.2@T[1]
 d <- data.frame(
   employment = factor(c(Employment.2@yRaw), labels = c("Full-time", "Other")),
   gender = factor(Employment.2@cov[,,1], labels = c("Woman", "Man")),
-  id = 1:N, age = rep(seq(20, 44, by = 2), each = N)) |>
+  id = 1:N, age = rep(seq(20, 44, by = 2), each = N)
+) |>
   mutate(fulltime = as.integer(employment == "Full-time"))
 ```
 
 Define the model in dynamite:
 ```{r, eval = FALSE}
 model_formula <- 
-  obs(fulltime ~ -1 +
-      varying(~ -1 + gender + gender:lag(never) + gender:lag(fulltime)),
-    family = "bernoulli") +
-  aux(never ~ fulltime == 0 & lag(never) == 1 | init(1)) +
+  obs(
+    fulltime ~ -1 + varying(~ -1 + gender + gender:lag(ever) + gender:lag(fulltime)),
+    family = "bernoulli"
+  ) +
+  aux(ever ~ fulltime == 1 | lag(ever) == 1 | init(0)) +
   splines(df = 6, noncentered = TRUE)
 
-fit <- dynamite(model_formula, data = d, group = "id", time = "age",
-  chains = 4, cores = 4, iter = 2000)
+fit <- dynamite(
+  model_formula, data = d, group = "id", time = "age",
+  chains = 4, cores = 4, iter = 2000
+)
 #saveRDS(fit, file = "fit_employment.rds")
 ```
 
@@ -45,19 +49,20 @@ Draw figure of time-varying parameters:
 fit <- readRDS("fit_employment.rds")
 coefs <- coef(fit, type = "delta", probs = c(0.025, 0.1, 0.9, 0.975)) |> 
   filter(time > 20) |> 
-    mutate(gender = recode(parameter,
-        delta_fulltime_genderMan = "Man",
-        delta_fulltime_genderWoman = "Woman",
-        "delta_fulltime_genderWoman:never_lag1" = "Woman",
-        "delta_fulltime_genderMan:never_lag1" = "Man",
-        "delta_fulltime_genderWoman:fulltime_lag1" = "Woman",
-        "delta_fulltime_genderMan:fulltime_lag1" = "Man"
+    mutate(
+      gender = recode(parameter,
+      delta_fulltime_genderMan = "Man",
+      delta_fulltime_genderWoman = "Woman",
+      "delta_fulltime_genderWoman:ever_lag1" = "Woman",
+      "delta_fulltime_genderMan:ever_lag1" = "Man",
+      "delta_fulltime_genderWoman:fulltime_lag1" = "Woman",
+      "delta_fulltime_genderMan:fulltime_lag1" = "Man"
     ),
     Coefficient = recode(parameter,
         delta_fulltime_genderMan = "intercept",
         delta_fulltime_genderWoman = "intercept",
-        "delta_fulltime_genderWoman:never_lag1" = "lag(never)",
-        "delta_fulltime_genderMan:never_lag1" = "lag(never)",
+        "delta_fulltime_genderWoman:ever_lag1" = "lag(ever)",
+        "delta_fulltime_genderMan:ever_lag1" = "lag(ever)",
         "delta_fulltime_genderWoman:fulltime_lag1" = "lag(employment)",
         "delta_fulltime_genderMan:fulltime_lag1" = "lag(employment)"
     ))
@@ -74,16 +79,20 @@ coefs <- coef(fit, type = "delta", probs = c(0.025, 0.1, 0.9, 0.975)) |>
 #     facet_wrap(~ gender, scales = "fixed") + 
 #     theme(legend.position = "bottom", panel.grid.minor.x = element_blank()) 
 p <- ggplot(coefs, aes(time, mean)) +
-    geom_ribbon(aes(ymin = q2.5, ymax = q97.5, fill = Coefficient), alpha = 0.25) +
+    geom_ribbon(aes(ymin = q2.5, ymax = q97.5, fill = Coefficient), alpha = 0.66) +
     geom_line(aes(linetype = Coefficient)) + 
     scale_x_continuous("Age", seq(22, 44, by = 2)) +
     scale_y_continuous("Value", seq(-6, 8, by = 2)) +
-    theme_bw() +
-    scale_linetype_manual(values=c("solid", "longdash", "dotted")) +
+    theme_bw(base_size = 14) +
+    scale_linetype_manual(values = c("solid", "longdash", "dotted")) +
     scale_fill_grey() +
     facet_wrap(~ gender, scales = "fixed") + 
-    theme(legend.position = "bottom", panel.grid.minor.x = element_blank()) 
-#ggsave(p, file = "../deltas_employment.png", width = 7, height = 4)
+    theme(
+      legend.position = "bottom",
+      legend.key.width = unit(1.75, "cm"),
+      panel.grid.minor.x = element_blank()
+    ) 
+ggsave(p, file = "../deltas_employment.png", width = 7, height = 4)
 ```
 
 ```{r, eval = FALSE}
@@ -98,17 +107,23 @@ newdata1$fulltime[newdata1$age > 30] <- NA
 
 pred <- 
   bind_rows(
-    no = predict(fit, newdata = newdata0,
-      funs = list(fulltime = list(mean = mean)))$simulated,
-    yes = predict(fit, newdata = newdata1,
-      funs = list(fulltime = list(mean = mean)))$simulated,
+    no = predict(
+      fit, newdata = newdata0,
+      funs = list(fulltime = list(mean = mean))
+    )$simulated,
+    yes = predict(
+      fit, newdata = newdata1,
+      funs = list(fulltime = list(mean = mean))
+    )$simulated,
     .id = "fulltime_30"
-  ) |> filter(age > 28) |> 
-  group_by(age) |>
-  summarise(difference = 
-      mean_fulltime[fulltime_30 == "yes"] - 
-      mean_fulltime[fulltime_30 == "no"]
+  ) |> 
+  filter(age > 28) |> 
+  reframe(
+    difference = mean_fulltime[fulltime_30 == "yes"] - 
+      mean_fulltime[fulltime_30 == "no"],
+    .by = "age"
   ) |>
+  group_by(age) |>
   summarise(
     mean = mean(difference),
     q2.5 = quantile(difference, 0.025),
@@ -128,11 +143,15 @@ obs_sumr <- d |> filter(age > 28) |>
   group_by(age, fulltime_30) |>
   summarise(mean_fulltime = mean(fulltime)) |>
   group_by(age) |>
-  summarise(mean = mean(mean_fulltime[fulltime_30 == "yes"] - mean_fulltime[fulltime_30 == "no"]),
-    .groups = "keep")
+  summarise(
+    mean = mean(mean_fulltime[fulltime_30 == "yes"] - mean_fulltime[fulltime_30 == "no"]),
+    .groups = "keep"
+  )
 comb <- bind_rows(
   intervention = pred,
-  observation = obs_sumr, .id = "Type") 
+  observation = obs_sumr, 
+  .id = "Type"
+) 
 #color version
 # p <- comb |>
 #   ggplot(aes(age, mean)) +
@@ -151,21 +170,29 @@ comb <- bind_rows(
 #     panel.grid.minor.y = element_blank()
 #   )
 p <- comb |>
-    ggplot(aes(age, mean)) +
-    geom_ribbon(data = comb |> filter(Type == "intervention"), 
-        aes(ymin = q2.5, ymax = q97.5, fill = Type), alpha = 0.25, show.legend = FALSE) +
-    geom_line(aes(linetype = Type)) +
-    scale_x_continuous("Age", seq(30, 44, by = 2)) +
-    scale_y_continuous("Probability", seq(0.2, 1, by = 0.1)) +
-    theme_bw() + 
-    scale_linetype_manual(name = NULL, 
-      values = c("solid", "longdash"), 
-      labels = c("Intervention", "Observation"))  +
-    scale_fill_grey()  +
-    theme(legend.position = "bottom", 
-        panel.grid.minor.x = element_blank(),
-        panel.grid.minor.y = element_blank()
-    )
-#ggsave(p, file = "../causaleffect_employment.png", width = 7, height = 4)
+  ggplot(aes(age, mean)) +
+  geom_ribbon(
+    data = comb |> filter(Type == "intervention"), 
+    aes(ymin = q2.5, ymax = q97.5, fill = Type), 
+    alpha = 0.50, 
+    show.legend = FALSE
+  ) +
+  geom_line(aes(linetype = Type)) +
+  scale_x_continuous("Age", seq(30, 44, by = 2)) +
+  scale_y_continuous("Difference", seq(0.2, 1, by = 0.1)) +
+  theme_bw(base_size = 14) + 
+  scale_linetype_manual(
+    name = NULL, 
+    values = c("solid", "longdash"), 
+    labels = c("Intervention", "Observation")
+  )  +
+  scale_fill_grey()  +
+  theme(
+    legend.position = "bottom", 
+    legend.key.width = unit(1.75, "cm"),
+    panel.grid.minor.x = element_blank(),
+    panel.grid.minor.y = element_blank()
+  )
+ggsave(p, file = "../causaleffect_employment.png", width = 7, height = 4)
 ```
 

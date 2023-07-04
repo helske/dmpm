@@ -1,6 +1,6 @@
 ---
 title: "Simulated example"
-author: "Jouni Helske"
+author: "Jouni Helske and Santtu Tikka"
 date: "`r Sys.Date()`"
 output: html_document
 ---
@@ -34,7 +34,7 @@ n <- n1 + n2
 Function for simulating the data:
 
 ```{r}
-simulate_data <- function(type) {
+simulate_data <- function(scenario) {
 
   sigma_y <- sigma_x <- 0.4
   beta_yx <- 0.4
@@ -43,7 +43,7 @@ simulate_data <- function(type) {
   beta_xy <- -0.1
   beta_xz <- 0.4
   beta_yz <- 1
-  if (type == "atomic") {
+  if (scenario == 1) {
     z <- rep(c(0, 1, 0), times = c(n1, 1, n2 - 1))
   } else {
     z <- rep(0:1, times = c(n1, n2))
@@ -89,14 +89,14 @@ simulate_data <- function(type) {
 }
 ```
 
-## Atomic case
+## Scenario 1
 
 Create data:
 ```{r}
 set.seed(808)
 # Data for the atomic case
-d_atomic <- simulate_data("atomic")
-true_effect_atomic <- d_atomic |>
+d_1 <- simulate_data(scenario = 1)
+true_effect_1 <- d_1 |>
   filter(time > n1) |>
   group_by(time) |>
   summarise(mean = mean(mean_y - mean_y_))
@@ -105,59 +105,62 @@ true_effect_atomic <- d_atomic |>
 Estimate the model with dynamite:
 ```{r, eval = FALSE}
 # Estimate the model
-fit_atomic <- dynamite(
-  obs(y ~ z, family = "gaussian") +
-    obs(x ~ z, family = "gaussian") + lags(),
-  data = d_atomic,
+fit_1 <- dynamite(
+  obs(y ~ z, family = "gaussian") + obs(x ~ z, family = "gaussian") + lags(),
+  data = d_1,
   time = "time",
   group = "id",
   chains = 4, cores = 4, refresh = 0)
-#saveRDS(fit_atomic, file = "fit_simulated_atomic.rds")
+#saveRDS(fit_1, file = "fit_simulated_scenario1.rds")
 ```
 
 ```{r, eval = FALSE}
-fit <- readRDS("fit_simulated_atomic.rds")
-newdata <- d_atomic |>
+fit <- readRDS("fit_simulated_scenario1.rds")
+newdata <- d_1 |>
   mutate(
     y = ifelse(time > n1, NA, y),
     x = ifelse(time > n1, NA, x)
   ) |> 
   filter(time >= n1)
-intervention_correct <-
-  predict(fit_atomic, newdata = newdata, type = "mean",
-    funs = list(y_mean = list(mean = mean)))$simulated
 
-newdata <- d_atomic |>
+intervention_correct <- predict(
+  fit, newdata = newdata, type = "mean", funs = list(y = list(mean = mean))
+)$simulated
+
+newdata <- d_1 |>
   mutate(
     y = ifelse(time > n1, NA, y),
     x = ifelse(time > n1, NA, x),
     z = 0
-  )  |> 
+  ) |> 
   filter(time >= n1)
-no_intervention_correct <-
-  predict(fit_atomic, newdata = newdata, type = "mean",
-    funs = list(y_mean = list(mean = mean)))$simulated
 
-newdata <- d_atomic |>
+no_intervention_correct <- predict(
+  fit, newdata = newdata, type = "mean", funs = list(y = list(mean = mean))
+)$simulated
+
+newdata <- d_1 |>
   mutate(
     y = ifelse(time > n1, NA, y)
   ) |> 
   filter(time >= n1)
-intervention_incorrect <-
-  predict(fit_atomic, newdata = newdata, type = "mean",
-    funs = list(y_mean = list(mean = mean)))$simulated
 
-newdata <- d_atomic |>
+intervention_incorrect <- predict(
+  fit, newdata = newdata, type = "mean", funs = list(y = list(mean = mean))
+)$simulated
+
+newdata <- d_1 |>
   mutate(
     y = ifelse(time > n1, NA, y),
     z = 0
   ) |> 
   filter(time >= n1)
-no_intervention_incorrect <-
-  predict(fit_atomic, newdata = newdata, type = "mean",
-    funs = list(y_mean = list(mean = mean)))$simulated
 
-results_atomic <- bind_rows(
+no_intervention_incorrect <- predict(
+  fit, newdata = newdata, type = "mean", funs = list(y = list(mean = mean))
+)$simulated
+
+results_1 <- bind_rows(
   correct = bind_rows(
     yes = intervention_correct,
     no = no_intervention_correct,
@@ -171,9 +174,9 @@ results_atomic <- bind_rows(
   .id = "Method"
 ) |>
   filter(time > n1) |>
-  group_by(Method, time, draw) |>
+  group_by(Method, time, .draw) |>
   summarise(
-    difference = mean_y_mean[intervention == "yes"] - mean_y_mean[intervention == "no"]
+    difference = mean_y[intervention == "yes"] - mean_y[intervention == "no"]
   ) |>
   group_by(Method, time) |>
   summarise(
@@ -183,17 +186,17 @@ results_atomic <- bind_rows(
     q10 = quantile(difference, 0.1),
     q90 = quantile(difference, 0.9),
   )
-#saveRDS(results_atomic, file = "results_atomic.rds")
+#saveRDS(results_1, file = "results_scenario1.rds")
 ```
 
-## Recurring case
+## Scenario 2
 
 Create data:
 ```{r}
 set.seed(808)
 # Data for the recurring case
-d_recurring <- simulate_data("recurring")
-true_effect_recurring <- d_recurring |>
+d_2 <- simulate_data(scenario = 2)
+true_effect_2 <- d_2 |>
   filter(time > n1) |>
   group_by(time) |>
   summarise(mean = mean(mean_y - mean_y_))
@@ -202,59 +205,62 @@ true_effect_recurring <- d_recurring |>
 Estimate the model with dynamite:
 ```{r, eval = FALSE}
 # Estimate the model
-fit_recurring <- dynamite(
-  obs(y ~ z, family = "gaussian") +
-    obs(x ~ z, family = "gaussian") + lags(),
-  data = d_recurring,
+fit_2 <- dynamite(
+  obs(y ~ z, family = "gaussian") + obs(x ~ z, family = "gaussian") + lags(),
+  data = d_2,
   time = "time",
   group = "id",
   chains = 4, cores = 4, refresh = 0)
-#saveRDS(fit_recurring, file = "fit_simulated_recurring.rds")
+#saveRDS(fit_2, file = "fit_simulated_scenario2.rds")
 ```
 
 ```{r, eval = FALSE}
-fit <- readRDS("fit_simulated_recurring.rds")
-newdata <- d_recurring |>
+fit <- readRDS("fit_simulated_scenario2.rds")
+newdata <- d_2 |>
   mutate(
     y = ifelse(time > n1, NA, y),
     x = ifelse(time > n1, NA, x)
   ) |> 
   filter(time >= n1)
-intervention_correct <-
-  predict(fit_recurring, newdata = newdata, type = "mean",
-    funs = list(y_mean = list(mean = mean)))$simulated
 
-newdata <- d_recurring |>
+intervention_correct <- predict(
+  fit, newdata = newdata, type = "mean", funs = list(y = list(mean = mean))
+)$simulated
+
+newdata <- d_2 |>
   mutate(
     y = ifelse(time > n1, NA, y),
     x = ifelse(time > n1, NA, x),
     z = 0
   )  |> 
   filter(time >= n1)
-no_intervention_correct <-
-  predict(fit_recurring, newdata = newdata, type = "mean",
-    funs = list(y_mean = list(mean = mean)))$simulated
 
-newdata <- d_recurring |>
+no_intervention_correct <- predict(
+  fit, newdata = newdata, type = "mean", funs = list(y = list(mean = mean))
+)$simulated
+
+newdata <- d_2 |>
   mutate(
     y = ifelse(time > n1, NA, y)
   ) |> 
   filter(time >= n1)
-intervention_incorrect <-
-  predict(fit_recurring, newdata = newdata, type = "mean",
-    funs = list(y_mean = list(mean = mean)))$simulated
 
-newdata <- d_recurring |>
+intervention_incorrect <- predict(
+  fit, newdata = newdata, type = "mean", funs = list(y = list(mean = mean))
+)$simulated
+
+newdata <- d_2 |>
   mutate(
     y = ifelse(time > n1, NA, y),
     z = 0
   ) |> 
   filter(time >= n1)
-no_intervention_incorrect <-
-  predict(fit_recurring, newdata = newdata, type = "mean",
-    funs = list(y_mean = list(mean = mean)))$simulated
 
-results_recurring <- bind_rows(
+no_intervention_incorrect <- predict(
+  fit, newdata = newdata, type = "mean", funs = list(y = list(mean = mean))
+)$simulated
+
+results_2 <- bind_rows(
   correct = bind_rows(
     yes = intervention_correct,
     no = no_intervention_correct,
@@ -268,9 +274,9 @@ results_recurring <- bind_rows(
   .id = "Method"
 ) |>
   filter(time > n1) |>
-  group_by(Method, time, draw) |>
+  group_by(Method, time, .draw) |>
   summarise(
-    difference = mean_y_mean[intervention == "yes"] - mean_y_mean[intervention == "no"]
+    difference = mean_y[intervention == "yes"] - mean_y[intervention == "no"]
   ) |>
   group_by(Method, time) |>
   summarise(
@@ -280,19 +286,18 @@ results_recurring <- bind_rows(
     q10 = quantile(difference, 0.1),
     q90 = quantile(difference, 0.9),
   )
-#saveRDS(results_recurring, file = "results_recurring.rds")
+#saveRDS(results_2, file = "results_scenario2.rds")
 ```
-
 
 ## Figures for the paper
 
 ```{r}
-results_atomic <- readRDS("results_atomic.rds")
-results_recurring <- readRDS("results_recurring.rds")
+results_1 <- readRDS("results_scenario1.rds")
+results_2 <- readRDS("results_scenario2.rds")
 # color version
 # p <- bind_rows(
-#   Atomic = results_atomic,
-#   Recurring = results_recurring,
+#   `Scenario 1` = results_1,
+#   Recurring = results_2,
 #   .id = "Intervention"
 # ) |>
 #   ggplot(aes(time, mean)) +
@@ -325,20 +330,31 @@ results_recurring <- readRDS("results_recurring.rds")
 #     theme(legend.position = "bottom", panel.grid.minor.x = element_blank()) + 
 #     facet_wrap(~ Intervention, scales = "free")
 p <- bind_rows(
-    Atomic = results_atomic,
-    Recurring = results_recurring,
-    .id = "Intervention"
+  `Scenario 1` = results_1,
+  `Scenario 2` = results_2,
+  .id = "Intervention"
 ) |>
-    ggplot(aes(time, mean)) +
-    geom_ribbon(aes(ymin = q2.5, ymax = q97.5, fill = Method), alpha = 0.25) +
-    geom_line(aes(linetype = Method)) +
-    scale_fill_grey() +
-    scale_linetype_manual(values = c("solid", "longdash")) +
-    ylab("Average causal effect") + 
-    xlab("Time") + xlim(c(80, 100)) +
-    theme_bw() + 
-    theme(legend.position = "bottom", panel.grid.minor.x = element_blank()) + 
-    facet_wrap(~ Intervention, scales = "free")
+  ggplot(aes(time, mean)) +
+  geom_ribbon(aes(ymin = q2.5, ymax = q97.5, fill = Method)) +
+  geom_line(aes(linetype = Method)) +
+  scale_fill_grey(
+    start = 0.75, 
+    end = 0.45, 
+    labels = c("Correct", "Incorrect")
+  ) +
+  scale_linetype_manual(
+    values = c("solid", "longdash"),
+    labels = c("Correct", "Incorrect")
+  ) +
+  ylab("Average causal effect") + 
+  xlab("Time") + xlim(c(80, 100)) +
+  theme_bw(base_size = 14) + 
+  theme(
+    legend.position = "bottom", 
+    panel.grid.minor.x = element_blank(),
+    legend.key.width = unit(1.75, "cm")
+  ) + 
+  facet_wrap(~ Intervention, scales = "free")
 ggsave(p, file = "../ex1_results.png", width = 7, height = 4)
 ```
 

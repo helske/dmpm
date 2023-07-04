@@ -1,0 +1,60 @@
+---
+title: "True Average Causal Effect in the Bivariate Gaussian Example"
+author: "Santtu Tikka"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Bivariate Gaussian Example
+
+We consider the following model:
+\[
+  \begin{aligned}
+    y_{1,t} &= 0.6 y_{1,t-1} + 0.4 y_{2,t-1} + x_{t,i} + \epsilon_{1,t}\\
+    y_{2,t} &= -0.1 y_{1,t-1} + 0.9 y_{2,t-1} + 0.4 x_{t} + \epsilon_{2,t}\\
+    \epsilon_{1,t} &\sim \mbox{N}(0, 0.4^2)\\
+    \epsilon_{2,t} &\sim \mbox{N}(0, 0.4^2).
+  \end{aligned}
+\]
+Our goal is to compute the following average causal effect when \(k \to \infty\):
+\[
+  \mbox{ACE}_2(t,k) = \mbox{E}(y_{1,t+k} | \mbox{do}(x_{t} = 1,\ldots,x_{t+k} = 1)) - \mbox{E}(y_{1,t+k} | \mbox{do}(x_{t} = 0,\ldots,x_{t+k} = 0)).
+\]
+First, we solve the recurrence relation for $y_{1,t}$ under the intervention and take the expectation. We simplify the notation by dropping the \(\mbox{do}(\cdot)\) terms and simply treat \(x_t\) as fixed. For the intervention \(\mbox{do}(x_{t} = 1,\ldots,x_{t+k} = 1)\), the model equation becomes
+\[
+  \begin{aligned}
+    \mbox{E}(y_{1,t}) &= 0.6 \mbox{E}(y_{1,t-1}) + 0.4 \mbox{E}(y_{2,t-1}) + 1 \\
+    \mbox{E}(y_{2,t}) &= -0.1 \mbox{E}(y_{1,t-1}) + 0.9 \mbox{E}(y_{2,t-1}) + 0.4.
+  \end{aligned}
+\]
+To further simplify the notation we denote \(Y_t = \mbox{E}(y_{1,t})\) and \(Z_t = \mbox{E}(y_{2,t})\). Thus we have
+\[
+  \begin{aligned}
+    Y_t &= 0.6 Y_{t-1} + 0.4 Z_{t-1} + 1 \\
+    Z_t &= -0.1 Y_{t-1} + 0.9 Z_{t-1} + 0.4.
+  \end{aligned}
+\]
+Solving for \(Z_{t-1}\) in the first equation and incrementing the time index by one yields
+\[
+  2 Z_t = 5 Y_{t+1} - 3 Y_t - 5.
+\]
+Substituting this into the second equation for both \(Z_t\) and \(Z_{t-1}\) yields
+\[
+  \frac52 Y_{t+1} - \frac32 Y_t - \frac52 = -\frac{1}{10} Y_{t-1} + \frac{9}{10}\left(\frac52 Y_{t+1} - \frac32 Y_t - \frac52 \right) + \frac25.
+\]
+By solving for \(Y_{t+1}\) we obtain a second order recurrence relation
+\[
+  Y_{t+1} = \frac32 Y_t - \frac{29}{50} Y_{t-1} + \frac{13}{50}.
+\]
+This is a linear nonhomogeneous recurrence, and its steady state value is
+\[
+ \frac{\frac{13}{50}}{1 - \frac{3}{2} + \frac{29}{50}} = \frac{13}{4}.
+\]
+Thus we can convert the recurrence to a homogeneous form, whose characteristic polynomial \(\lambda^2 - \frac32\lambda + 29/50\) has roots that are all less than 1 in absolute value. Thus the recurrence converges to the steady state. For the intervention \(\mbox{do}(x_{t} = 0,\ldots,x_{t+k} = 0)\), it is easy to see that the expectation converges to 0. Thus we obtain the desired limit
+\[
+  \lim_{k \to \infty} \mbox{ACE}_2(t,k) = \frac{13}{4} = 3.25.
+\]

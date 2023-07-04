@@ -1,0 +1,153 @@
+---
+title: "Partnership example"
+author: "Jouni Helske and Santtu Tikka"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+The data used in this example is from the companion website of the book "Sequence Analysis" by Marcel Raab and Emanuela Struffolino (2022): https://sa-book.github.io/. 
+
+Load some packages and read the data:
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(dynamite)
+library(ggplot2)
+library(RColorBrewer)
+# See the Rmd source for the code on how to create this file from SA book files
+d <- readRDS("family_data.rds") 
+```
+
+```{r, eval = FALSE, echo = FALSE}
+# Create the family_data.rds object:
+
+library(dplyr)
+library(haven)
+library(TraMineR)
+library(TraMineRextras)
+
+# This file is from Chapter 2 codes of the SA book
+# https://sa-book.github.io/rChapter2-1.html
+family <- read_dta("PartnerBirthbio.dta")
+
+# Create a monthly sequence data, code from SA book
+seqvars.partner <- family %>%
+  select(starts_with("state")) %>%
+  mutate_all(~case_when(
+    . < 3 ~ 1,            # Single
+    . %in% c(3,4) ~ 2,    # LAT
+    . %in% c(5,6) ~ 3,    # Cohabiting
+    . > 6 ~ 4,))          # Married
+
+shortlab.partner <- c("S", "LAT", "COH", "MAR")
+longlab.partner <-  c("Single", "LAT", "Cohabiting", "Married")
+
+partner.month.seq <- seqdef(
+  seqvars.partner, 
+  states = shortlab.partner, 
+  labels = longlab.partner, alphabet = c(1:4),  
+  weights = family$weight40,
+  id = family$id,
+  xtstep = 24
+)
+partner.year.seq <- seqgranularity(
+  partner.month.seq, 
+  tspan = 12, method = "mostfreq"
+)
+
+# Now create a data frame for dynamite
+n <- nrow(partner.year.seq)
+T_ <- ncol(partner.year.seq)
+d <- data.frame(
+  id = 1:n,
+  time = rep(1:T_, each = n),
+  status = unlist(partner.year.seq),
+  sex = factor(unclass(family$sex), labels = c("Male", "Female")),
+  church = factor(unclass(family$church), labels = c("No", "Yes"))
+)
+```
+
+
+
+
+```{r, eval = FALSE}
+set.seed(1)
+fit <- dynamite(
+  obs(status ~ -1 + lag(status) + sex + church + random(~1), "categorical") + 
+    random_spec(correlated = TRUE),
+    data = d, group = "id", time = "time", chains = 4, cores = 4, refresh = 0)
+# this is not stored in the repo due to its size
+saveRDS(fit, file = "partnership_fit.rds") 
+```
+```{r, echo = FALSE}
+# load the estimated model
+fit <- readRDS("partnership_fit.rds")
+```
+
+```{r}
+summary(fit, type = "beta", probs = c(0.025, 0.975)) |> arrange(parameter)
+summary(fit, types = c("sigma_nu", "corr_nu"), probs = c(0.025, 0.975))
+```
+
+Create function for computing transition probabilities:
+
+```{r}
+transition_probs <- function(fit, from, church) {
+  
+d_time <- data.frame(time = 1:2)
+d_id <- fit$data |> 
+  filter(time == 1) |> 
+  select(id, sex)
+
+d_status <- data.frame(status = from, church = church)
+d_new <- crossing(d_time, d_id, d_status) |> 
+  mutate(status = ifelse(time == 2, NA, status))
+
+pred <- fitted(fit, newdata = d_new) |> 
+  filter(time == 2)
+
+pred |> 
+    group_by(.draw) |> 
+    summarise(
+        S = mean(status_fitted_S), 
+        LAT = mean(status_fitted_LAT),
+        COH = mean(status_fitted_COH),
+        MAR = mean(status_fitted_MAR)
+    ) |> 
+    summarise(
+        S_p = mean(S), S_lwr = quantile(S, 0.025), S_upr = quantile(S, 0.975),
+        LAT_p = mean(LAT), LAT_lwr = quantile(LAT, 0.025), LAT_upr = quantile(LAT, 0.975),
+        COH_p = mean(COH), COH_lwr = quantile(COH, 0.025), COH_upr = quantile(COH, 0.975),
+        MAR_p = mean(MAR), MAR_lwr = quantile(MAR, 0.025), MAR_upr = quantile(MAR, 0.975),
+    )
+}
+```
+
+```{r, cache = TRUE}
+fit <- readRDS(fit, file = "partnership_fit.rds")
+No <- rbind(
+  transition_probs(fit, "S", "No"),
+  transition_probs(fit, "LAT", "No"),
+  transition_probs(fit, "COH", "No"),
+  transition_probs(fit, "MAR", "No")
+)
+Yes <- rbind(
+  transition_probs(fit, "S", "Yes"),
+  transition_probs(fit, "LAT", "Yes"),
+  transition_probs(fit, "COH", "Yes"),
+  transition_probs(fit, "MAR", "Yes")
+)
+```
+```{r}
+print(No, width = Inf)
+print(Yes, width = Inf)
+```
+
+References
+
+Raab, M. & Struffolino, E. (2022). Sequence Analysis. Thousand Oaks, CA: Sage.
