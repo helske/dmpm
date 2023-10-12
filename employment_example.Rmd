@@ -29,40 +29,76 @@ d <- data.frame(
 
 Define the model in dynamite:
 ```{r, eval = FALSE}
+set.seed(1)
 model_formula <- 
+  obs(
+    fulltime ~ -1 + gender:lag(ever) + varying(~ -1 + gender + gender:lag(fulltime)),
+    family = "bernoulli"
+  ) +
+  aux(numeric(ever) ~ fulltime == 1 | lag(ever) == 1 | init(0)) +
+  splines(df = 6, noncentered = TRUE)
+priors <- get_priors(model_formula, data = d, group = "id", time = "age")
+priors$prior[priors$type == "tau"] <- "normal(0, 1)"
+fit <- dynamite(
+  model_formula, data = d, group = "id", time = "age", priors = priors,
+  chains = 4, cores = 4, iter = 5000, refresh = 0
+)
+saveRDS(fit, file = "fit_employment.rds")
+```
+```{r, eval = FALSE, echo = FALSE}
+# Alternative model where also gender:lag(ever) is time-varying
+# This leads to some divergences, would likely need tighter prior on tau:
+# For later ages there are no cases with lag(ever) = 0 & employment = 1
+# and because there are relatively few time points, the time-varying coefficient
+# of gender:lag(ever) tends to cause numerical issues.
+set.seed(1)
+model_formula2 <- 
   obs(
     fulltime ~ -1 + varying(~ -1 + gender + gender:lag(ever) + gender:lag(fulltime)),
     family = "bernoulli"
   ) +
-  aux(ever ~ fulltime == 1 | lag(ever) == 1 | init(0)) +
+  aux(numeric(ever) ~ fulltime == 1 | lag(ever) == 1 | init(0)) +
   splines(df = 6, noncentered = TRUE)
 
-fit <- dynamite(
-  model_formula, data = d, group = "id", time = "age",
-  chains = 4, cores = 4, iter = 2000
+priors <- get_priors(model_formula2, data = d, group = "id", time = "age")
+priors$prior[priors$type == "tau"] <- "normal(0, 1)"
+
+fit2 <- dynamite(
+  model_formula2, data = d, group = "id", time = "age", priors = priors,
+  chains = 4, cores = 4, iter = 5000, refresh = 0
 )
-#saveRDS(fit, file = "fit_employment.rds")
+# compare models with leave-one-out cross-validation:
+l1 <- loo(fit)
+l2 <- loo(fit2)
+loo::loo_compare(l1, l2) # equally good models
+save(fit, fit2, l1, l2, file = "employment_loo.rds")
+```
+
+Check MCMC diagnostics:
+```{r}
+fit <- readRDS("fit_employment.rds")
+mcmc_diagnostics(fit)
+```
+
+Time-invariant parameters:
+```{r}
+coef(fit, probs = c(0.025, 0.975))[, 1:5]
 ```
 
 Draw figure of time-varying parameters:
 ```{r, fig.align="center"}
-fit <- readRDS("fit_employment.rds")
 coefs <- coef(fit, type = "delta", probs = c(0.025, 0.1, 0.9, 0.975)) |> 
   filter(time > 20) |> 
     mutate(
       gender = recode(parameter,
       delta_fulltime_genderMan = "Man",
       delta_fulltime_genderWoman = "Woman",
-      "delta_fulltime_genderWoman:ever_lag1" = "Woman",
-      "delta_fulltime_genderMan:ever_lag1" = "Man",
       "delta_fulltime_genderWoman:fulltime_lag1" = "Woman",
       "delta_fulltime_genderMan:fulltime_lag1" = "Man"
     ),
     Coefficient = recode(parameter,
         delta_fulltime_genderMan = "intercept",
         delta_fulltime_genderWoman = "intercept",
-        "delta_fulltime_genderWoman:ever_lag1" = "lag(ever)",
-        "delta_fulltime_genderMan:ever_lag1" = "lag(ever)",
         "delta_fulltime_genderWoman:fulltime_lag1" = "lag(employment)",
         "delta_fulltime_genderMan:fulltime_lag1" = "lag(employment)"
     ))
@@ -84,7 +120,7 @@ p <- ggplot(coefs, aes(time, mean)) +
     scale_x_continuous("Age", seq(22, 44, by = 2)) +
     scale_y_continuous("Value", seq(-6, 8, by = 2)) +
     theme_bw(base_size = 14) +
-    scale_linetype_manual(values = c("solid", "longdash", "dotted")) +
+    scale_linetype_manual(values = c("solid", "longdash")) +
     scale_fill_grey() +
     facet_wrap(~ gender, scales = "fixed") + 
     theme(
@@ -92,6 +128,7 @@ p <- ggplot(coefs, aes(time, mean)) +
       legend.key.width = unit(1.75, "cm"),
       panel.grid.minor.x = element_blank()
     ) 
+p
 ggsave(p, file = "../deltas_employment.png", width = 7, height = 4)
 ```
 
@@ -131,7 +168,7 @@ pred <-
     q10 = quantile(difference, 0.1),
     q90 = quantile(difference, 0.9)
   )
-#saveRDS(pred, file = "predictions_employment.rds")
+saveRDS(pred, file = "predictions_employment.rds")
 ```
 
 
@@ -193,6 +230,7 @@ p <- comb |>
     panel.grid.minor.x = element_blank(),
     panel.grid.minor.y = element_blank()
   )
+p
 ggsave(p, file = "../causaleffect_employment.png", width = 7, height = 4)
 ```
 

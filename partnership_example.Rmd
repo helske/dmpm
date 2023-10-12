@@ -20,7 +20,8 @@ library(dynamite)
 library(ggplot2)
 library(RColorBrewer)
 # See the Rmd source for the code on how to create this file from SA book files
-d <- readRDS("family_data.rds") 
+d <- readRDS("family_data.rds") |> 
+  filter(!is.na(church)) # remove 32 individuals with missing church variable
 ```
 
 ```{r, eval = FALSE, echo = FALSE}
@@ -70,6 +71,7 @@ d <- data.frame(
   sex = factor(unclass(family$sex), labels = c("Male", "Female")),
   church = factor(unclass(family$church), labels = c("No", "Yes"))
 )
+saveRDS(d, file = "family_data.rds")
 ```
 
 
@@ -82,11 +84,11 @@ fit <- dynamite(
     random_spec(correlated = TRUE),
     data = d, group = "id", time = "time", chains = 4, cores = 4, refresh = 0)
 # this is not stored in the repo due to its size
-saveRDS(fit, file = "partnership_fit.rds") 
+saveRDS(fit, file = "fit_partnership.rds") 
 ```
 ```{r, echo = FALSE}
 # load the estimated model
-fit <- readRDS("partnership_fit.rds")
+fit <- readRDS("fit_partnership.rds")
 ```
 
 ```{r}
@@ -129,7 +131,6 @@ pred |>
 ```
 
 ```{r, cache = TRUE}
-fit <- readRDS(fit, file = "partnership_fit.rds")
 No <- rbind(
   transition_probs(fit, "S", "No"),
   transition_probs(fit, "LAT", "No"),
@@ -146,6 +147,33 @@ Yes <- rbind(
 ```{r}
 print(No, width = Inf)
 print(Yes, width = Inf)
+```
+Compare to the conditional transitions matrices computed from the data:
+```{r}
+matrix(
+  d |> filter(church == "Yes") |> 
+    group_by(id) |> 
+    mutate(lag_status = lag(status)) |> 
+    filter(!is.na(lag_status)) |> 
+    group_by(lag_status, status) |>
+    summarise(transition_count = n()) |> 
+    mutate(p = transition_count / sum(transition_count)) |> 
+    select(lag_status, status, p) |> 
+    pull(p),
+  4, 4, TRUE, list(c("S", "LAT", "COH","MAR"), c("S", "LAT", "COH","MAR"))
+)
+matrix(
+  d |> filter(church == "No") |> 
+    group_by(id) |> 
+    mutate(lag_status = lag(status)) |> 
+    filter(!is.na(lag_status)) |> 
+    group_by(lag_status, status) |>
+    summarise(transition_count = n()) |> 
+    mutate(p = transition_count / sum(transition_count)) |> 
+    select(lag_status, status, p) |> 
+    pull(p),
+  4, 4, TRUE, list(c("S", "LAT", "COH","MAR"), c("S", "LAT", "COH","MAR"))
+)
 ```
 
 References
