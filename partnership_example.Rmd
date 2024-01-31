@@ -16,6 +16,7 @@ Load some packages and read the data:
 ```{r}
 library(dplyr)
 library(tidyr)
+library(posterior)
 library(dynamite)
 library(ggplot2)
 library(RColorBrewer)
@@ -78,11 +79,15 @@ saveRDS(d, file = "family_data.rds")
 
 
 ```{r, eval = FALSE}
+# cmdstanr backend as it is currently faster than rstan with categorical responses
 set.seed(1)
 fit <- dynamite(
   obs(status ~ -1 + lag(status) + sex + church + random(~1), "categorical") + 
     random_spec(correlated = TRUE),
-    data = d, group = "id", time = "time", chains = 4, cores = 4, refresh = 0)
+    data = d, group = "id", time = "time", 
+  backend = "cmdstanr", parallel_chains = 4, 
+  iter_sampling = 5000, iter_warmup = 1000, refresh = 0,
+  save_warmup = FALSE, stanc_options = list("O1"))
 # this is not stored in the repo due to its size
 saveRDS(fit, file = "fit_partnership.rds") 
 ```
@@ -91,9 +96,20 @@ saveRDS(fit, file = "fit_partnership.rds")
 fit <- readRDS("fit_partnership.rds")
 ```
 
+Check MCMC diagnostics:
 ```{r}
-summary(fit, type = "beta", probs = c(0.025, 0.975)) |> arrange(parameter)
-summary(fit, types = c("sigma_nu", "corr_nu"), probs = c(0.025, 0.975))
+mcmc_diagnostics(fit)
+```
+
+Parameter estimates: 
+```{r}
+as_draws(fit, types = c("beta", "sigma_nu", "corr_nu")) |> 
+  posterior::summarise_draws(
+    "mean", 
+    "sd",
+    ~quantile(.x, probs = c(0.025, 0.975)),
+     "rhat", "ess_bulk", "ess_tail") |> 
+  print(n = Inf)
 ```
 
 Create function for computing transition probabilities:

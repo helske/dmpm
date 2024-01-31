@@ -7,6 +7,7 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+eval <- FALSE # whether to estimate the model and causal effects again
 ```
 
 Load some packages and create the data:
@@ -28,7 +29,7 @@ d <- data.frame(
 ```
 
 Define the model in dynamite:
-```{r, eval = FALSE}
+```{r, eval = eval}
 set.seed(1)
 model_formula <- 
   obs(
@@ -41,18 +42,108 @@ priors <- get_priors(model_formula, data = d, group = "id", time = "age")
 priors$prior[priors$type == "tau"] <- "normal(0, 1)"
 fit <- dynamite(
   model_formula, data = d, group = "id", time = "age", priors = priors,
-  chains = 4, cores = 4, iter = 5000, refresh = 0
+  chains = 4, cores = 4, iter = 5000, refresh = 0,
+  save_warmup = FALSE
 )
 saveRDS(fit, file = "fit_employment.rds")
 ```
-```{r, eval = FALSE, echo = FALSE}
+
+Test different values of $D$:
+```{r, eval = eval}
+set.seed(1)
+model_formula <- 
+  obs(
+    fulltime ~ -1 + gender:lag(ever) + varying(~ -1 + gender + gender:lag(fulltime)),
+    family = "bernoulli"
+  ) +
+  aux(numeric(ever) ~ fulltime == 1 | lag(ever) == 1 | init(0)) +
+  splines(df = 4, noncentered = TRUE)
+priors <- get_priors(model_formula, data = d, group = "id", time = "age")
+priors$prior[priors$type == "tau"] <- "normal(0, 1)"
+fit4 <- dynamite(
+  model_formula, data = d, group = "id", time = "age", priors = priors,
+  chains = 4, cores = 4, iter = 5000, refresh = 0
+)
+saveRDS(fit4, file = "fit_employment_D4.rds")
+
+set.seed(1)
+model_formula <- 
+  obs(
+    fulltime ~ -1 + gender:lag(ever) + varying(~ -1 + gender + gender:lag(fulltime)),
+    family = "bernoulli"
+  ) +
+  aux(numeric(ever) ~ fulltime == 1 | lag(ever) == 1 | init(0)) +
+  splines(df = 8, noncentered = TRUE)
+priors <- get_priors(model_formula, data = d, group = "id", time = "age")
+priors$prior[priors$type == "tau"] <- "normal(0, 1)"
+fit8 <- dynamite(
+  model_formula, data = d, group = "id", time = "age", priors = priors,
+  chains = 4, cores = 4, iter = 5000, refresh = 0
+)
+saveRDS(fit8, file = "fit_employment_D8.rds")
+
+set.seed(1)
+model_formula <- 
+  obs(
+    fulltime ~ -1 + gender:lag(ever) + varying(~ -1 + gender + gender:lag(fulltime)),
+    family = "bernoulli"
+  ) +
+  aux(numeric(ever) ~ fulltime == 1 | lag(ever) == 1 | init(0)) +
+  splines(df = 15, noncentered = TRUE)
+priors <- get_priors(model_formula, data = d, group = "id", time = "age")
+priors$prior[priors$type == "tau"] <- "normal(0, 1)"
+fit15 <- dynamite(
+  model_formula, data = d, group = "id", time = "age", priors = priors,
+  chains = 4, cores = 4, iter = 5000, refresh = 0
+)
+saveRDS(fit15, file = "fit_employment_D15.rds")
+```
+
+```{r, echo = FALSE, eval = eval}
+l6 <- loo(fit)
+l4 <- loo(fit4)
+l8 <- loo(fit8)
+l15 <- loo(fit15)
+save(l4, l6, l8, l15, file = "employment_loo.rds")
+```
+
+Compare models with different D values using leave-one-out cross-validation:
+```{r, eval = FALSE}
+l6 <- loo(fit)
+l4 <- loo(fit4)
+l8 <- loo(fit8)
+l15 <- loo(fit15)
+loo::loo_compare(l4, l6, l8, l15)
+```
+```{r, echo = FALSE}
+load(file = "employment_loo.rds")
+loo::loo_compare(l4, l6, l8, l15)
+fit4 <- readRDS("fit_employment_D4.rds")
+fit15 <- readRDS("fit_employment_D15.rds")
+```
+
+Deltas for $D=4$:
+```{r}
+plot_deltas(fit4)
+```
+
+Deltas for $D=15$:
+```{r}
+plot_deltas(fit15)
+```
+
+While there is some differences in the smoothness of the time-varying effects, from a predictive pespective the models are essentially indistinguishable. Leave-future-out cross-validation (LFO-CV) is not very informative here as we have only 13 time points and we need to condition on some initial data to make the LFO-CV stable. Nevertheless, it could be performed with `lfo` function, e.g. `lfo(fit, L = 6)` where `L = 6` defines that first 6 time points are used for the initial fit.
+
+
+```{r, echo = FALSE, eval = FALSE}
+
 # Alternative model where also gender:lag(ever) is time-varying
 # This leads to some divergences, would likely need tighter prior on tau:
 # For later ages there are no cases with lag(ever) = 0 & employment = 1
 # and because there are relatively few time points, the time-varying coefficient
 # of gender:lag(ever) tends to cause numerical issues.
 set.seed(1)
-model_formula2 <- 
+model_formula_alt <- 
   obs(
     fulltime ~ -1 + varying(~ -1 + gender + gender:lag(ever) + gender:lag(fulltime)),
     family = "bernoulli"
@@ -63,24 +154,34 @@ model_formula2 <-
 priors <- get_priors(model_formula2, data = d, group = "id", time = "age")
 priors$prior[priors$type == "tau"] <- "normal(0, 1)"
 
-fit2 <- dynamite(
+fit_alt <- dynamite(
   model_formula2, data = d, group = "id", time = "age", priors = priors,
-  chains = 4, cores = 4, iter = 5000, refresh = 0
+  chains = 4, cores = 4, iter = 5000, refresh = 0,
+  save_warmup = FALSE
 )
-# compare models with leave-one-out cross-validation:
-l1 <- loo(fit)
-l2 <- loo(fit2)
-loo::loo_compare(l1, l2) # equally good models
-save(fit, fit2, l1, l2, file = "employment_loo.rds")
+loo::loo_compare(l6, loo(fit_alt)) # current model is better
+```
+
+```{r, echo = FALSE}
+fit <- readRDS("fit_employment.rds")
 ```
 
 Check MCMC diagnostics:
 ```{r}
-fit <- readRDS("fit_employment.rds")
 mcmc_diagnostics(fit)
 ```
 
 Time-invariant parameters:
+
+```{r}
+as_draws(fit, types = c("beta", "tau")) |> 
+  posterior::summarise_draws(
+    "mean", 
+    "sd",
+    ~quantile(.x, probs = c(0.025, 0.975)),
+     "rhat", "ess_bulk", "ess_tail")
+```
+
 ```{r}
 coef(fit, probs = c(0.025, 0.975))[, 1:5]
 ```
@@ -132,7 +233,7 @@ p
 ggsave(p, file = "../deltas_employment.png", width = 7, height = 4)
 ```
 
-```{r, eval = FALSE}
+```{r, eval = eval}
 # No full time employment at age 30
 newdata0 <- d |> filter(age >= 28)
 newdata0$fulltime[newdata0$age == 30] <- 0
@@ -234,3 +335,76 @@ p
 ggsave(p, file = "../causaleffect_employment.png", width = 7, height = 4)
 ```
 
+Repeat the causal effect estimation for $D=15$ for comparative purposes:
+
+```{r, eval = FALSE}
+# No full time employment at age 30
+newdata0 <- d |> filter(age >= 28)
+newdata0$fulltime[newdata0$age == 30] <- 0
+newdata0$fulltime[newdata0$age > 30] <- NA
+# Full time employment at age 30
+newdata1 <- d |> filter(age >= 28)
+newdata1$fulltime[newdata1$age == 30] <- 1
+newdata1$fulltime[newdata1$age > 30] <- NA
+
+pred <- 
+  bind_rows(
+    no = predict(
+      fit15, newdata = newdata0,
+      funs = list(fulltime = list(mean = mean))
+    )$simulated,
+    yes = predict(
+      fit, newdata = newdata1,
+      funs = list(fulltime = list(mean = mean))
+    )$simulated,
+    .id = "fulltime_30"
+  ) |> 
+  filter(age > 28) |> 
+  reframe(
+    difference = mean_fulltime[fulltime_30 == "yes"] - 
+      mean_fulltime[fulltime_30 == "no"],
+    .by = "age"
+  ) |>
+  group_by(age) |>
+  summarise(
+    mean = mean(difference),
+    q2.5 = quantile(difference, 0.025),
+    q97.5 = quantile(difference, 0.975),
+    q10 = quantile(difference, 0.1),
+    q90 = quantile(difference, 0.9)
+  )
+saveRDS(pred, file = "predictions_employment_D15.rds")
+```
+
+
+```{r, fig.align="center"}
+pred15 <- readRDS("predictions_employment_D15.rds")
+p <- bind_rows(
+  d6 = pred,
+  d15 = pred15, 
+  .id = "D"
+) |>
+  ggplot(aes(age, mean)) +
+  geom_ribbon(
+    aes(ymin = q2.5, ymax = q97.5, fill = D), 
+    alpha = 0.20, 
+    show.legend = FALSE
+  ) +
+  geom_line(aes(linetype = D)) +
+  scale_x_continuous("Age", seq(30, 44, by = 2)) +
+  scale_y_continuous("Difference", seq(0.2, 1, by = 0.1)) +
+  theme_bw(base_size = 14) + 
+  scale_linetype_manual(
+    name = NULL, 
+    values = c("solid", "longdash"), 
+    labels = c("D = 15", "D = 6")
+  )  +
+  theme(
+    legend.position = "bottom", 
+    legend.key.width = unit(1.75, "cm"),
+    panel.grid.minor.x = element_blank(),
+    panel.grid.minor.y = element_blank()
+  )
+p
+ggsave(p, file = "../causaleffect_employment_D6_vs_D15.png", width = 7, height = 4)
+```

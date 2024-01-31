@@ -111,11 +111,30 @@ fit_1 <- dynamite(
   time = "time",
   group = "id",
   chains = 4, cores = 4, refresh = 0)
-#saveRDS(fit_1, file = "fit_simulated_scenario1.rds")
+saveRDS(fit_1, file = "fit_simulated_scenario1.rds")
+```
+
+```{r, echo = FALSE}
+fit_1 <- readRDS("fit_simulated_scenario1.rds")
+```
+
+Check MCMC diagnostics:
+```{r}
+mcmc_diagnostics(fit_1)
+```
+
+Parameter estimates: 
+
+```{r}
+as_draws(fit_1) |> 
+  posterior::summarise_draws(
+    "mean", 
+    "sd",
+    ~quantile(.x, probs = c(0.025, 0.975)),
+     "rhat", "ess_bulk", "ess_tail")
 ```
 
 ```{r, eval = FALSE}
-fit <- readRDS("fit_simulated_scenario1.rds")
 newdata <- d_1 |>
   mutate(
     y = ifelse(time > n1, NA, y),
@@ -124,7 +143,7 @@ newdata <- d_1 |>
   filter(time >= n1)
 
 intervention_correct <- predict(
-  fit, newdata = newdata, type = "mean", funs = list(y = list(mean = mean))
+  fit_1, newdata = newdata, type = "mean", funs = list(y = list(mean = mean))
 )$simulated
 
 newdata <- d_1 |>
@@ -136,7 +155,7 @@ newdata <- d_1 |>
   filter(time >= n1)
 
 no_intervention_correct <- predict(
-  fit, newdata = newdata, type = "mean", funs = list(y = list(mean = mean))
+  fit_1, newdata = newdata, type = "mean", funs = list(y = list(mean = mean))
 )$simulated
 
 newdata <- d_1 |>
@@ -146,7 +165,7 @@ newdata <- d_1 |>
   filter(time >= n1)
 
 intervention_incorrect <- predict(
-  fit, newdata = newdata, type = "mean", funs = list(y = list(mean = mean))
+  fit_1, newdata = newdata, type = "mean", funs = list(y = list(mean = mean))
 )$simulated
 
 newdata <- d_1 |>
@@ -157,7 +176,7 @@ newdata <- d_1 |>
   filter(time >= n1)
 
 no_intervention_incorrect <- predict(
-  fit, newdata = newdata, type = "mean", funs = list(y = list(mean = mean))
+  fit_1, newdata = newdata, type = "mean", funs = list(y = list(mean = mean))
 )$simulated
 
 results_1 <- bind_rows(
@@ -186,7 +205,7 @@ results_1 <- bind_rows(
     q10 = quantile(difference, 0.1),
     q90 = quantile(difference, 0.9),
   )
-#saveRDS(results_1, file = "results_scenario1.rds")
+saveRDS(results_1, file = "results_scenario1.rds")
 ```
 
 ## Scenario 2
@@ -211,11 +230,30 @@ fit_2 <- dynamite(
   time = "time",
   group = "id",
   chains = 4, cores = 4, refresh = 0)
-#saveRDS(fit_2, file = "fit_simulated_scenario2.rds")
+saveRDS(fit_2, file = "fit_simulated_scenario2.rds")
+```
+
+```{r, echo = FALSE}
+fit_2 <- readRDS("fit_simulated_scenario2.rds")
+```
+
+Check MCMC diagnostics:
+```{r}
+mcmc_diagnostics(fit_2)
+```
+
+Parameter estimates: 
+
+```{r}
+as_draws(fit_2) |> 
+  posterior::summarise_draws(
+    "mean", 
+    "sd",
+    ~quantile(.x, probs = c(0.025, 0.975)),
+     "rhat", "ess_bulk", "ess_tail")
 ```
 
 ```{r, eval = FALSE}
-fit <- readRDS("fit_simulated_scenario2.rds")
 newdata <- d_2 |>
   mutate(
     y = ifelse(time > n1, NA, y),
@@ -224,7 +262,7 @@ newdata <- d_2 |>
   filter(time >= n1)
 
 intervention_correct <- predict(
-  fit, newdata = newdata, type = "mean", funs = list(y = list(mean = mean))
+  fit_2, newdata = newdata, type = "mean", funs = list(y = list(mean = mean))
 )$simulated
 
 newdata <- d_2 |>
@@ -236,7 +274,7 @@ newdata <- d_2 |>
   filter(time >= n1)
 
 no_intervention_correct <- predict(
-  fit, newdata = newdata, type = "mean", funs = list(y = list(mean = mean))
+  fit_2, newdata = newdata, type = "mean", funs = list(y = list(mean = mean))
 )$simulated
 
 newdata <- d_2 |>
@@ -246,7 +284,7 @@ newdata <- d_2 |>
   filter(time >= n1)
 
 intervention_incorrect <- predict(
-  fit, newdata = newdata, type = "mean", funs = list(y = list(mean = mean))
+  fit_2, newdata = newdata, type = "mean", funs = list(y = list(mean = mean))
 )$simulated
 
 newdata <- d_2 |>
@@ -257,7 +295,7 @@ newdata <- d_2 |>
   filter(time >= n1)
 
 no_intervention_incorrect <- predict(
-  fit, newdata = newdata, type = "mean", funs = list(y = list(mean = mean))
+  fit_2, newdata = newdata, type = "mean", funs = list(y = list(mean = mean))
 )$simulated
 
 results_2 <- bind_rows(
@@ -286,7 +324,7 @@ results_2 <- bind_rows(
     q10 = quantile(difference, 0.1),
     q90 = quantile(difference, 0.9),
   )
-#saveRDS(results_2, file = "results_scenario2.rds")
+saveRDS(results_2, file = "results_scenario2.rds")
 ```
 
 ## Figures for the paper
@@ -358,3 +396,37 @@ p <- bind_rows(
 ggsave(p, file = "../ex1_results.png", width = 7, height = 4)
 ```
 
+Same figure where the true effects are shown in red:
+
+```{r}
+p <- bind_rows(
+  `Scenario 1` = results_1,
+  `Scenario 2` = results_2,
+  .id = "Intervention"
+) |>
+  ggplot(aes(time, mean)) +
+  geom_ribbon(aes(ymin = q2.5, ymax = q97.5, fill = Method)) +
+  geom_line(aes(linetype = Method)) +
+  scale_fill_grey(
+    start = 0.75, 
+    end = 0.45, 
+    labels = c("Correct", "Incorrect")
+  ) +
+  geom_line(data = cbind(Intervention = "Scenario 1", true_effect_1), colour = "tomato") +
+    geom_line(data = cbind(Intervention = "Scenario 2", true_effect_2), colour = "tomato") +
+  scale_linetype_manual(
+    values = c("solid", "longdash"),
+    labels = c("Correct", "Incorrect")
+  ) +
+  ylab("Average causal effect") + 
+  xlab("Time") + xlim(c(n1, n)) +
+  theme_bw(base_size = 14) + 
+  theme(
+    legend.position = "bottom", 
+    panel.grid.minor.x = element_blank(),
+    legend.key.width = unit(1.75, "cm")
+  ) + 
+  facet_wrap(~ Intervention, scales = "free")
+p
+ggsave(p, file = "../ex1_results_with_truth.png", width = 7, height = 4)
+```
