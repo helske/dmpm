@@ -2,7 +2,9 @@
 title: "Employment example"
 author: "Jouni Helske and Santtu Tikka"
 date: "`r Sys.Date()`"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -134,7 +136,6 @@ plot_deltas(fit15)
 
 While there is some differences in the smoothness of the time-varying effects, from a predictive pespective the models are essentially indistinguishable. Leave-future-out cross-validation (LFO-CV) is not very informative here as we have only 13 time points and we need to condition on some initial data to make the LFO-CV stable. Nevertheless, it could be performed with `lfo` function, e.g. `lfo(fit, L = 6)` where `L = 6` defines that first 6 time points are used for the initial fit.
 
-
 ```{r, echo = FALSE, eval = FALSE}
 
 # Alternative model where also gender:lag(ever) is time-varying
@@ -203,18 +204,6 @@ coefs <- coef(fit, type = "delta", probs = c(0.025, 0.1, 0.9, 0.975)) |>
         "delta_fulltime_genderWoman:fulltime_lag1" = "lag(employment)",
         "delta_fulltime_genderMan:fulltime_lag1" = "lag(employment)"
     ))
-# color version
-# p <- ggplot(coefs, aes(time, mean)) +
-#     geom_ribbon(aes(ymin = q2.5, ymax = q97.5, fill = Coefficient), alpha = 0.25) +
-#     geom_ribbon(aes(ymin = q10, ymax = q90, fill = Coefficient), alpha = 0.25) +
-#     geom_line(aes(colour = Coefficient)) + 
-#     scale_x_continuous("Age", seq(22, 44, by = 2)) +
-#     scale_y_continuous("Value", seq(-6, 8, by = 2)) +
-#     theme_bw() +
-#     scale_colour_brewer(palette = "Dark2") +
-#     scale_fill_brewer(palette = "Dark2") +
-#     facet_wrap(~ gender, scales = "fixed") + 
-#     theme(legend.position = "bottom", panel.grid.minor.x = element_blank()) 
 p <- ggplot(coefs, aes(time, mean)) +
     geom_ribbon(aes(ymin = q2.5, ymax = q97.5, fill = Coefficient), alpha = 0.66) +
     geom_line(aes(linetype = Coefficient)) + 
@@ -233,6 +222,7 @@ p
 ggsave(p, file = "../deltas_employment.png", width = 7, height = 4)
 ```
 
+Estimate the causal effects:
 ```{r, eval = eval}
 # No full time employment at age 30
 newdata0 <- d |> filter(age >= 28)
@@ -272,7 +262,7 @@ pred <-
 saveRDS(pred, file = "predictions_employment.rds")
 ```
 
-
+Draw the figure:
 ```{r, fig.align="center"}
 pred <- readRDS("predictions_employment.rds")
 obs_sumr <- d |> filter(age > 28) |> 
@@ -290,23 +280,7 @@ comb <- bind_rows(
   observation = obs_sumr, 
   .id = "Type"
 ) 
-#color version
-# p <- comb |>
-#   ggplot(aes(age, mean)) +
-#   geom_ribbon(data = comb |> filter(Type == "intervention"), 
-#     aes(ymin = q2.5, ymax = q97.5, fill = Type), alpha = 0.25, show.legend = FALSE) +
-#   geom_ribbon(data = comb |> filter(Type == "intervention"), 
-#     aes(ymin = q10, ymax = q90, fill = Type), alpha = 0.25, show.legend = FALSE) +
-#   geom_line(aes(linetype = Type)) +
-#   scale_x_continuous("Age", seq(30, 44, by = 2)) +
-#   scale_y_continuous("Probability", seq(0.2, 1, by = 0.1)) +
-#   theme_bw() + 
-#   scale_fill_grey(labels = c("Intervention", "Observation"), name = NULL) +
-#   scale_shape_discrete(labels = c("Intervention", "Observation"), name = NULL)
-#   theme(legend.position = "bottom", 
-#     panel.grid.minor.x = element_blank(),
-#     panel.grid.minor.y = element_blank()
-#   )
+
 p <- comb |>
   ggplot(aes(age, mean)) +
   geom_ribbon(
@@ -376,6 +350,7 @@ pred <-
 saveRDS(pred, file = "predictions_employment_D15.rds")
 ```
 
+Differences in causal effect estimates with $D=6$ and $D=15$:
 
 ```{r, fig.align="center"}
 pred15 <- readRDS("predictions_employment_D15.rds")

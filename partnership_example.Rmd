@@ -2,7 +2,9 @@
 title: "Partnership example"
 author: "Jouni Helske and Santtu Tikka"
 date: "`r Sys.Date()`"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -146,6 +148,8 @@ pred |>
 }
 ```
 
+These take time due to the large number of posterior samples and less than optimal coding of the function above:
+
 ```{r, cache = TRUE}
 No <- rbind(
   transition_probs(fit, "S", "No"),
@@ -164,6 +168,7 @@ Yes <- rbind(
 print(No, width = Inf)
 print(Yes, width = Inf)
 ```
+
 Compare to the conditional transitions matrices computed from the data:
 ```{r}
 matrix(

@@ -2,11 +2,14 @@
 title: "Simulated example"
 author: "Jouni Helske and Santtu Tikka"
 date: "`r Sys.Date()`"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+eval <- FALSE # Whether or not to rerun the models and simulations
 ```
 
 Load some packages and create the data:
@@ -17,6 +20,7 @@ library(dplyr)
 library(ggplot2)
 library(RColorBrewer)
 ```
+
 fix number of individuals and number of time points:
 
 ```{r}
@@ -103,7 +107,7 @@ true_effect_1 <- d_1 |>
 ```
 
 Estimate the model with dynamite:
-```{r, eval = FALSE}
+```{r, eval = eval}
 # Estimate the model
 fit_1 <- dynamite(
   obs(y ~ z, family = "gaussian") + obs(x ~ z, family = "gaussian") + lags(),
@@ -134,7 +138,8 @@ as_draws(fit_1) |>
      "rhat", "ess_bulk", "ess_tail")
 ```
 
-```{r, eval = FALSE}
+Estimate the causal effects:
+```{r, eval = eval}
 newdata <- d_1 |>
   mutate(
     y = ifelse(time > n1, NA, y),
@@ -222,7 +227,7 @@ true_effect_2 <- d_2 |>
 ```
 
 Estimate the model with dynamite:
-```{r, eval = FALSE}
+```{r, eval = eval}
 # Estimate the model
 fit_2 <- dynamite(
   obs(y ~ z, family = "gaussian") + obs(x ~ z, family = "gaussian") + lags(),
@@ -253,7 +258,9 @@ as_draws(fit_2) |>
      "rhat", "ess_bulk", "ess_tail")
 ```
 
-```{r, eval = FALSE}
+Estimate the causal effects:
+
+```{r, eval = eval}
 newdata <- d_2 |>
   mutate(
     y = ifelse(time > n1, NA, y),
@@ -332,41 +339,6 @@ saveRDS(results_2, file = "results_scenario2.rds")
 ```{r}
 results_1 <- readRDS("results_scenario1.rds")
 results_2 <- readRDS("results_scenario2.rds")
-# color version
-# p <- bind_rows(
-#   `Scenario 1` = results_1,
-#   Recurring = results_2,
-#   .id = "Intervention"
-# ) |>
-#   ggplot(aes(time, mean)) +
-#   geom_ribbon(aes(ymin = q2.5, ymax = q97.5, fill = Method), alpha = 0.25) +
-#   geom_ribbon(aes(ymin = q10, ymax = q90, fill = Method), alpha = 0.25) +
-#   geom_line(aes(colour = Method)) +
-#   ylab("Average causal effect") + 
-#   xlab("Time") + xlim(c(80, 100)) +
-#   theme_bw() + 
-#   scale_colour_brewer(palette = "Dark2", name = NULL, 
-#     labels = c("Simulated x", "Observed x")) +
-#   scale_fill_brewer(palette = "Dark2", name = NULL, 
-#     labels = c("Simulated x", "Observed x")) + 
-#   theme(legend.position = "bottom", panel.grid.minor.x = element_blank()) + 
-#   facet_wrap(~ Intervention, scales = "free")
-# linerange version
-# bind_rows(
-#     Atomic = results_atomic,
-#     Recurring = results_recurring,
-#     .id = "Intervention"
-# ) |>
-#     ggplot(aes(time, mean, group = Method)) +
-#     ylab("Average causal effect") + 
-#     geom_linerange(aes(ymin = q2.5, ymax = q97.5), position = position_dodge(0.6)) +
-#     geom_point(aes(shape = Method), position = position_dodge(0.6)) +
-#     geom_line(aes(linetype = Method), position = position_dodge(0.6)) +
-#     ylab("Average causal effect") + 
-#     xlab("Time") + xlim(c(79, 101)) +
-#     theme_bw() + 
-#     theme(legend.position = "bottom", panel.grid.minor.x = element_blank()) + 
-#     facet_wrap(~ Intervention, scales = "free")
 p <- bind_rows(
   `Scenario 1` = results_1,
   `Scenario 2` = results_2,
@@ -393,6 +365,7 @@ p <- bind_rows(
     legend.key.width = unit(1.75, "cm")
   ) + 
   facet_wrap(~ Intervention, scales = "free")
+p
 ggsave(p, file = "../ex1_results.png", width = 7, height = 4)
 ```
 
