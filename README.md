@@ -3,7 +3,7 @@ Codes for reproducing the results in the paper "Estimating Causal Effects from P
 
 The `.pdf` files contain the analysis of the examples and the appendices, see the corresponding Rmarkdown (`.Rmd`) files for details. Some of result files are also available without rerunning the analysis (some are too large for Github). These `.rds` files should be loaded to `R` using `readRDS` function.
 
-You need to also install the `dynamite` package which is provided as source (`tar.gz`) format, and which can be installed in R as `install.packages("dynamite_1.4.7.tar.gz")`.
+You need to also install the `dynamite` package which is provided as source (`tar.gz`) format, and which can be installed in R as `install.packages("dynamite_1.4.9.tar.gz")`.
 
 If on a Windows platform you may also need to update your `rstan` and `StanHeaders` installation by running
 
