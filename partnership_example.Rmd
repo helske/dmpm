@@ -99,12 +99,12 @@ fit <- readRDS("fit_partnership.rds")
 ```
 
 Check MCMC diagnostics:
-```{r}
+```{r, cache = TRUE}
 mcmc_diagnostics(fit)
 ```
 
 Parameter estimates: 
-```{r}
+```{r, cache = TRUE}
 as_draws(fit, types = c("beta", "sigma_nu", "corr_nu")) |> 
   posterior::summarise_draws(
     "mean", 
@@ -164,14 +164,14 @@ Yes <- rbind(
   transition_probs(fit, "MAR", "Yes")
 )
 ```
-```{r}
+```{r, cache = TRUE}
 print(No, width = Inf)
 print(Yes, width = Inf)
 ```
 
 Compare to the conditional transitions matrices computed from the data:
-```{r}
-matrix(
+```{r, cache = TRUE}
+Yes_obs <- matrix(
   d |> filter(church == "Yes") |> 
     group_by(id) |> 
     mutate(lag_status = lag(status)) |> 
@@ -183,7 +183,7 @@ matrix(
     pull(p),
   4, 4, TRUE, list(c("S", "LAT", "COH","MAR"), c("S", "LAT", "COH","MAR"))
 )
-matrix(
+No_obs <- matrix(
   d |> filter(church == "No") |> 
     group_by(id) |> 
     mutate(lag_status = lag(status)) |> 
@@ -195,6 +195,63 @@ matrix(
     pull(p),
   4, 4, TRUE, list(c("S", "LAT", "COH","MAR"), c("S", "LAT", "COH","MAR"))
 )
+No_obs
+Yes_obs
+```
+
+We can assess the difference of these matrices for example by comparing the corresponding stationary distributions, although their interpretability is limited as the true partnership-formation process is naturally nonstationary:
+```{r, cache = TRUE}
+library(expm)
+
+round((as.matrix(Yes[, seq(1, ncol(Yes), by = 3)]) %^% 1000)[1, ], 2)
+round((as.matrix(No[, seq(1, ncol(Yes), by = 3)]) %^% 1000)[1, ], 2)
+round((Yes_obs %^% 1000)[1, ], 2)
+round((No_obs %^% 1000)[1, ], 2)
+```
+
+We also tested a model where there is an interaction with `sex` and `church`:
+
+```{r, eval = FALSE}
+# cmdstanr backend as it is currently faster than rstan with categorical responses
+set.seed(1)
+fit_interaction <- dynamite(
+  obs(status ~ -1 + lag(status) + sex * church + random(~1), "categorical") + 
+    random_spec(correlated = TRUE),
+    data = d, group = "id", time = "time", 
+  backend = "cmdstanr", parallel_chains = 4, 
+  iter_sampling = 5000, iter_warmup = 1000, refresh = 0,
+  save_warmup = FALSE, stanc_options = list("O1"))
+# this is not stored in the repo due to its size
+saveRDS(fit, file = "fit_partnership_interaction.rds") 
+```
+```{r, echo = FALSE}
+# load the estimated model
+fit_interaction <- readRDS("fit_partnership_interaction.rds")
+```
+
+We see that the interaction terms are negligible:
+```{r, cache = TRUE}
+as_draws(fit_interaction, parameters = "beta_status_sexFemale:churchYes") |> 
+  posterior::summarise_draws(
+    "mean", 
+    "sd",
+    ~quantile(.x, probs = c(0.025, 0.975)),
+     "rhat", "ess_bulk", "ess_tail") |> 
+  print(n = Inf)
+```
+
+And the leave-one-out-cross-validation prefers the simpler model without the interaction:
+```{r, eval = FALSE}
+l1 <- loo(fit, thin = 10) # thin to make this less memory intensive
+l2 <- loo(fit_interaction, thin = 10) # thin to make this less memory intensive
+save(l1, l2, file = "partnership_loos.rda")
+```
+```{r, echo = FALSE}
+# load the LOOs
+load("partnership_loos.rda")
+```
+```{r}
+loo::loo_compare(l1, l2)
 ```
 
 References
